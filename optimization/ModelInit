@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Sep  8 20:51:49 2021
+
+@author: jacopo
+"""
+
+def model_Init(model):
+
+#%%Objective definitions
+        #economical objective
+        def econ_obj_rule(m):
+            expr = 0
+            
+            #summation of costs through different sources
+            for b in m.pv_sources_set:
+                #pv
+                expr += sum(m.pv_comp_block[b].pv_cost*m.pv_comp_block[b].pv_max_power[t]\
+                            *m.pv_comp_block[b].pv_module_power[t]*m.pv_comp_block[b].pv_peak_mod\
+                            for t in m.simulation_steps)   
+              #battery
+            for b in m.battery_comp_block:
+                expr += sum(m.battery_comp_block[b].battery_charge_cost*m.battery_comp_block[b].battery_current_charge_power[t]\
+                            for t in m.simulation_steps)
+            #shortage
+            expr += sum(m.shortage_costs*m.shortage_power[t]\
+                        for t in m.simulation_steps)
+            #grid        
+            expr += sum(m.grid_buyprice[t]*m.grid_current_bought_power[t]\
+                        - m.grid_sellprice[t]*m.grid_current_sold_power[t]\
+                        for t in m.simulation_steps)
+            
+            return m.econ_opt == expr  
+        
+        # def econ_obj_rule1(m):
+        #     expr = 0
+            
+        #     #summation of costs through different sources
+        #     for b in m.pv_sources_set:
+        #         #pv
+        #         expr += m.pv_comp_block[b].pv_cost + m.battery_comp_block[b].battery_charge_cost #+ m.shortage_costs
+             
+        #     # #grid        
+        #     # expr += sum(m.grid_buyprice[t]*m.grid_current_bought_power[t] for t in m.simulation_steps) / sum(m.grid_current_bought_power[t] for t in m.simulation_steps) 
+        #     # expr -= sum(m.grid_sellprice[t]*m.grid_current_sold_power[t] for t in m.simulation_steps) / sum(m.grid_current_sold_power[t] for t in m.simulation_steps) 
+        #     return m.econ_opt == expr  
+        
+        self.model.econ_obj_constr = pyo.Constraint(rule=econ_obj_rule)
+        
+        self.model.econ_obj = pyo.Objective(expr=self.model.econ_opt, sense = pyo.minimize)
+        
+        
+        #%%
+        #%%defining Constraints
+        #constraint for meeting demand at all timesteps t
+        def meet_demand_rule(m,t):
+            expr = 0
+            
+            #summation of power from different sources
+            #pv
+            for b in m.pv_comp_block:
+                expr += m.pv_comp_block[b].pv_max_power[t]*m.pv_comp_block[b].pv_module_power[t]*m.pv_comp_block[b].pv_charger_efficiency[t]\
+                    *m.pv_comp_block[b].pv_peak_mod
+            
+            #battery  
+            for b in m.battery_comp_block:
+                expr += m.battery_comp_block[b].battery_current_discharge_power[t]\
+                    *m.battery_comp_block[b].battery_discharging_efficiency[t]*m.battery_comp_block[b].battery_discharger_efficiency[t]\
+                    - m.battery_comp_block[b].battery_current_charge_power[t]
+            
+            #shortage
+            expr += m.shortage_power[t]
+            
+            #grid
+            expr += m.grid_current_bought_power[t]-m.grid_current_sold_power[t]
+            
+            return expr == m.demand[t]
+                
+        self.model.meet_demand_constr = pyo.Constraint(self.model.simulation_steps, rule = meet_demand_rule)
+        
+        #%%LCOE constraints
+        #pv
+        def pv_LCOE_rule(m, b):
+            expr = 0
+            expr =  m.pv_comp_block[b].pv_total_LCOE_factor * m.pv_comp_block[b].pv_array_kWp\
+                *m.pv_comp_block[b].pv_peak_mod/ (1 + sum(m.pv_comp_block[b].pv_used_power[t] \
+                for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+            # expr =  m.pv_comp_block[b].pv_total_LCOE_factor * m.pv_comp_block[b].pv_array_kWp\
+            #     *m.pv_comp_block[b].pv_peak_mod/ (1 + sum(m.pv_comp_block[b].pv_max_power[t]*m.pv_comp_block[b].pv_module_power[t] \
+            #     *m.pv_comp_block[b].pv_charger_efficiency[t]*m.pv_comp_block[b].pv_peak_mod
+            #           for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+            
+            return m.pv_comp_block[b].pv_cost == expr
+        self.model.pv_LCOE_constr = pyo.Constraint(self.model.pv_sources_set, rule = pv_LCOE_rule)
+        
+        #battery
+        def battery_charge_LCOE_rule(m, b):
+            expr = 0
+            # expr = m.battery_comp_block[b].bat_total_LCOE_factor * m.battery_comp_block[b].bat_array_kWp\
+            #     / (1+sum(m.battery_comp_block[b].battery_charged_power[t]
+            #           for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+            # expr = m.battery_comp_block[b].battery_peak_mod* m.battery_comp_block[b].bat_total_LCOE_factor * m.battery_comp_block[b].bat_array_kWp\
+            #     / (1+sum(m.battery_comp_block[b].battery_charged_power[t]
+            #           for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+            if self.opt_batt_size == True:
+                expr = m.battery_comp_block[b].battery_peak_mod* m.battery_comp_block[b].bat_total_LCOE_factor * m.battery_comp_block[b].bat_array_kWp\
+                    / (1+sum(m.battery_comp_block[b].battery_current_discharge_power[t]\
+                     *m.battery_comp_block[b].battery_discharging_efficiency[t]*m.battery_comp_block[b].battery_discharger_efficiency[t]
+                         for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+            else:
+                expr = m.battery_comp_block[b].bat_total_LCOE_factor * m.battery_comp_block[b].bat_array_kWp\
+                / (1+sum(m.battery_comp_block[b].battery_current_discharge_power[t]\
+                     *m.battery_comp_block[b].battery_discharging_efficiency[t]*m.battery_comp_block[b].battery_discharger_efficiency[t]
+                      for t in m.simulation_steps)*(m.time_step/3600)/ (m.sim_step/8760))
+                
+            return m.battery_comp_block[b].battery_charge_cost == expr
+        self.model.battery_LCOE_constr = pyo.Constraint(self.model.battery_arrays_set, rule = battery_charge_LCOE_rule)
+        
+        #%%max peak power and capacity constraints
+        def max_pv_peak_rule(m,b):
+            expr = m.pv_comp_block[b].pv_array_kWp * m.pv_comp_block[b].pv_peak_mod
+            return expr <= m.pv_comp_block[b].max_pv_kWp
+        self.model.max_pv_kWp_constr = pyo.Constraint(self.model.pv_sources_set, rule = max_pv_peak_rule)
+        
+        def max_battery_capa_rule(m,b):
+            expr = m.battery_comp_block[b].bat_array_kWp * m.battery_comp_block[b].battery_peak_mod
+            return expr <= m.battery_comp_block[b].max_battery_capacity
+        self.model.max_battery_capa_constr = pyo.Constraint(self.model.battery_arrays_set, rule = max_battery_capa_rule)
+        
+        
+        #%%Constraint for battery state of charge
+        def SOC_rule (m,b,t):
+            expr = 0
+            if t == 1:
+                expr = m.battery_comp_block[b].SOC_start
+            elif t > 1 :
+                #negative battery current flow as flow into battery when battery current flo is negative
+                batt_total_capa = m.battery_comp_block[b].battery_peak_mod * m.battery_comp_block[b].battery_capacity_current_wh[t-1]
+                expr = m.battery_comp_block[b].battery_SOC[t-1]\
+                    + (m.battery_comp_block[b].battery_current_charge_power[t-1]\
+                    *m.battery_comp_block[b].battery_charging_efficiency[t-1]*m.battery_comp_block[b].battery_charger_efficiency[t-1]\
+                    - m.battery_comp_block[b].battery_current_discharge_power[t-1])\
+                    /batt_total_capa\
+                    - m.battery_comp_block[b].battery_self_discharge
+            else:
+                print ("SOC_Rule: t not in right bounds")
+            
+            return m.battery_comp_block[b].battery_SOC[t] == expr
+        
+        self.model.SOC_constr = pyo.Constraint(self.model.battery_arrays_set, self.model.simulation_steps, rule = SOC_rule)
+        
+        #Constraint for maximal discharge power at last time step
+        def last_discharge_rule(m, b):
+            expr = 0
+            expr += (m.battery_comp_block[b].battery_SOC[self.simulation_steps] - self.SOC_min)*m.battery_comp_block[b].battery_capacity_current_wh[self.simulation_steps]\
+                *m.battery_comp_block[b].battery_peak_mod
+            return m.battery_comp_block[b].battery_current_discharge_power[self.simulation_steps] <= expr
+        self.model.last_discharge_constr = pyo.Constraint(self.model.battery_arrays_set, rule = last_discharge_rule)
+        
+        
+        # %%disjunctive constraint for battery charge and discharge
+        #two conditions for each time step
+        # def _d_batt_charge(disjunct, b, t, flag ):
+        #     m = disjunct.model()
+        #     if flag:
+        #           #discharging
+        #         disjunct.ch = pyo.Constraint(expr = m.battery_comp_block[b].battery_current_discharge_power[t] >= m.battery_comp_block[b].battery_min_discharge_power )
+        #         disjunct.dch = pyo.Constraint(expr = m.battery_comp_block[b].battery_current_charge_power[t] <= m.battery_comp_block[b].battery_min_charge_power)
+        #     else:
+        #         #charging 
+        #         disjunct.ch = pyo.Constraint(expr = m.battery_comp_block[b].battery_current_discharge_power[t] <= m.battery_comp_block[b].battery_min_discharge_power)
+        #         disjunct.dch = pyo.Constraint(expr = m.battery_comp_block[b].battery_current_charge_power[t] >= m.battery_comp_block[b].battery_min_charge_power )
+        
+        # self.model.d_batt_charge = gdp.Disjunct(self.model.battery_arrays_set, self.model.simulation_steps, [0,1], rule=_d_batt_charge)
+        
+        # #define the disjunction for grid buy and sell 
+        # def _c_batt_charge(m, b, t):
+        #     return [m.d_batt_charge[b, t, 0],m.d_batt_charge[b, t, 1]]
+        # self.model.c_batt_charge = gdp.Disjunction(self.model.battery_arrays_set, self.model.simulation_steps, rule=_c_batt_charge)
+        
+        #%%disjunctive constraint for buy and sell amount
+        # #two conditions for each time step
+        # def _d(disjunct, t, flag ):
+        #     m = disjunct.model()
+        #     if flag:
+        #         #buying power ==> sell == 0
+        #         disjunct.buy = pyo.Constraint(expr = m.grid_current_bought_power[t] >= 0)
+        #         disjunct.sell = pyo.Constraint( expr = m.grid_current_sold_power[t] <= 0)
+        #     else:
+        #         #selling power ==> buy == 0
+        #         disjunct.buy = pyo.Constraint(expr = m.grid_current_bought_power[t] <= 0)
+        #         disjunct.sell = pyo.Constraint( expr = m.grid_current_sold_power[t] >= 0)
+        # self.model.d = gdp.Disjunct(self.model.simulation_steps, [0,1], rule=_d)
+        
+        # #define the disjunction for grid buy and sell 
+        # def _c(m, t):
+        #     return [m.d[t, 0],m.d[t, 1]]
+        # self.model.c = gdp.Disjunction(self.model.simulation_steps, rule=_c)
+        
+      
