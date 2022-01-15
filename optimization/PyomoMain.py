@@ -25,23 +25,25 @@ class Optimization_model():
     
     def __init__(self, simulation_steps, time_step, simulation, opt_pv_size, opt_batt_size):
         
-        #simulation solver
         self.opt = None
         
-        #simulation parameters
+        #optimization settings
         self.simulation_steps = simulation_steps
         self.time_step = time_step        
         self.sim = simulation
         self.opt_pv_size = opt_pv_size
         self.opt_batt_size = opt_batt_size
+        #solver specifications
+        self.solver_type = 'ma57'                           #solver to be used to solve the model (must be donloaded first)
+        #fit efficiencies through polynomial fit
+        self.poly_fit_eff = False                           #Toggle whether efficiency are to be approximated by a 
+        self.exact_ch_eff = True
         
-        self.deviation_threshold = 0.01
+        self.deviation_threshold = 0.01                     #maximal allowed deviation between two consecutive iterations
         self.deviation_counter = 0
-        self.low_dev_in_row = 1     #to mark how many deviations in a row need to be lower than threshhold to have an answer
+        self.low_dev_in_row = 1                             #number of consecutive deviations with acceptable deviation neede to exit 
         
-        
-        self.round_error = 0.0
-        
+        #%%initialize optimization model
         #variable to take track of iterations over optimization model
         self.iteration = 0
         
@@ -58,8 +60,7 @@ class Optimization_model():
         self.power_junct_flow =list()
         self.bought_power_list = list()
         self.sold_power_list = list()
-        self.power_shortage_list = list()
-        
+        self.power_shortage_list = list()        
         
         #save first pv power flows
         self.pv_max_power_start = list()
@@ -71,12 +72,7 @@ class Optimization_model():
         #update flag
         self.update = False
         
-        #solver specifications
-        self.solver_type = 'ma57'
-                
-        #fit efficiencies through polynomial fit
-        self.poly_fit_eff = False
-        self.exact_ch_eff = True
+        
    
     def update_model_data(self, eco_pv, eco_bat, eco_charger, eco_bms):
         """Method to update modelling parameters.
@@ -229,7 +225,8 @@ class Optimization_model():
         None
         
         '''
-            
+        print('------------Optimization deviation-----------')
+   
         deviation_threshold_passed = True
         
         #go into next optimization model iteration
@@ -295,9 +292,6 @@ class Optimization_model():
         self.model.sim_step = pyo.Param( initialize = self.simulation_steps)
         self.model.simulation_steps = pyo.RangeSet(1,self.simulation_steps)
         self.model.time_step = pyo.Param(initialize = self.time_step)
-        
-        #rounding error to be used for disjuncts
-        self.model.round_error = pyo.Param(initialize = self.round_error)
         
         #demand curve data
         def demand_init_rule(m,t):
@@ -645,7 +639,7 @@ class Optimization_model():
             def pv_charger_eff_rule(m,b,t):
                 expr = sum(m.pv_comp_block[b].ch_eff_param[i]*m.pv_comp_block[b].pv_module_power[t]**(m.pv_eff_fit_deg-i) \
                             for i in m.pv_charger_eff_coeff_set)
-                return m.pv_comp_block[b].pv_charger_efficiency[t] == 0.9
+                return m.pv_comp_block[b].pv_charger_efficiency[t] == expr
             self.model.pv_charger_eff_const = pyo.Constraint(self.model.pv_sources_set, self.model.simulation_steps, rule = pv_charger_eff_rule)
 
             #run time intensive constraint
@@ -654,7 +648,7 @@ class Optimization_model():
                             * m.battery_comp_block[b].battery_capacity_current_wh[t]))\
                             **(m.batt_eff_fit_deg-i)* m.battery_comp_block[b].ch_eff_param[i]\
                             for i in m.battery_charger_eff_coeff_set)
-                return m.battery_comp_block[b].battery_charger_efficiency[t] == 0.8
+                return m.battery_comp_block[b].battery_charger_efficiency[t] == expr
             self.model.battery_charger_eff_const = pyo.Constraint(self.model.battery_arrays_set, self.model.simulation_steps, rule = battery_charger_eff_rule)
         
             #run time intensive constraint
@@ -663,7 +657,7 @@ class Optimization_model():
                             * m.battery_comp_block[b].battery_capacity_current_wh[t]))
                 expr = power_output / (power_output + m.battery_comp_block[b].power_self_consumption + (power_output * m.battery_comp_block[b].voltage_loss) \
                     + (power_output**2 * m.battery_comp_block[b].resistance_loss))
-                return m.battery_comp_block[b].battery_discharger_efficiency[t]== 0.8
+                return m.battery_comp_block[b].battery_discharger_efficiency[t]== expr
             self.model.battery_discharger_eff_const = pyo.Constraint(self.model.battery_arrays_set, self.model.simulation_steps, rule = battery_discharger_eff_rule)
 
         if self.exact_ch_eff:
@@ -778,8 +772,9 @@ class Optimization_model():
          #get start time
         start = datetime.now()
         start_time = start.strftime("%H:%M:%S")
-                
-        print('----Optimization procedure start----')
+        print('---------------------------------------------------------')
+        print('Optimization procedure start')
+        print('---------------------------------------------------------')
         print("Start Time =", start_time)
         
         # pyo.TransformationFactory('core.logical_to_linear').apply_to(self.model)
@@ -827,17 +822,19 @@ class Optimization_model():
         # print(pyo.value(self.model.pv_comp_block[1].pv_peak_mod[1]))
                 
         b=1
-        
+        print('-------Economical data-------')
         print('pvLCOE:',round(pyo.value(self.model.pv_comp_block[b].pv_cost)*1000/self.sim.order_of_magnitude,4))
         print('battery LCOE', round(pyo.value(self.model.battery_comp_block[b].battery_charge_cost)*1000/self.sim.order_of_magnitude,4))
         print('buy cost:', pyo.value(self.model.grid_buyprice[1])*1000/self.sim.order_of_magnitude)
         print('shortage LCOE:',round(pyo.value(self.model.shortage_costs)*1000/self.sim.order_of_magnitude,4))
-        
+        print('total costs:',round(self.total_costs_new,4)) 
+
         self.pv_peak_mod_list = list()
         for i in range(len(self.sim.pv)):
             self.pv_peak_mod_list.append(pyo.value(self.model.pv_comp_block[i+1].pv_peak_mod[1]))
-        print('pv_peak_mod:', self.pv_peak_mod_list)
         self.batt_peak_mod = pyo.value(self.model.battery_comp_block[b].battery_peak_mod[1]) 
+        print('-------Size modifiers-------')
+        print('pv_peak_mod:', self.pv_peak_mod_list)
         print('battery_peak_mod:',round(self.batt_peak_mod,2))
         
         
@@ -918,7 +915,6 @@ class Optimization_model():
         
         # print('attention:\n'\
         #       '-minimal_efficiency set to 0 in power_component and battery module. Might cause ipopt to fail')
-        print('total costs:',round(self.total_costs_new,4)) 
         
     
     def get_opt_values(self):
