@@ -6,19 +6,18 @@ from simulation import Simulation
 from evaluation.sensitivity import Sensitivity_analysis
 from evaluation.economics import Economics
 from evaluation.performance import Performance
+from evaluation.dispatch_eval import Dispatch_Eval
 from evaluation.graphics import Graphics
 from data_manager import *
 
 from optimization.PyomoMain import Optimization_model
-
-#sbaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaam
 
 def Main():
     #%% Define simulation settings 
     # Simulation timestep in seconds
     timestep = 60*60
     # Simulation number of timestep
-    simulation_steps = 24*365*10
+    simulation_steps = 24*31*1
     #declare if run needs to be saved
     save_data = False
     
@@ -30,17 +29,17 @@ def Main():
     #Call Main Simulation methods
     sim.simulate()  
     
-    #%%Create pyomo optimization model
+    #%%Define pyomo optimization settings
     #declare whether model needs to be optimized with Pyomo-model addon
     optimization = True
     opt_model = None
-    
-    opt_pv = True
-    opt_bat = False
-    
+    #toggle multiobjective optimsation objectives
+    opt_pv = True  
+    opt_bat = True
+    #maximal number of iterations per optimisation run
     max_opt_iterations = 30
     
-    #create optimization model if true on the first iteration 
+    #create optimization instance
     if optimization:
         opt_model = Optimization_model(
             simulation_steps = simulation_steps, 
@@ -49,24 +48,24 @@ def Main():
             opt_pv_size = opt_pv,
             opt_batt_size = opt_bat)
     
-    #%% initialize technical performance
-    tech_Jan = Performance(simulation=sim,
-                        opt_model = opt_model,
-                        timestep=timestep,
-                        optimization = optimization)
-    tech_Jul = Performance(simulation=sim,
-                        opt_model = opt_model,
-                        timestep=timestep,
-                        optimization = optimization)
-    tech_yr10_Jul = Performance(simulation=sim,
+    #%% initialize technical performance instance
+    tech = Performance(simulation=sim,
                         opt_model = opt_model,
                         timestep=timestep,
                         optimization = optimization)
     
-    #%%initialize sensitivity analysis
+    #%% inititalize dispatch evaluation instance
+    dispatch = Dispatch_Eval(simulation=sim,
+                        opt_model = opt_model,
+                        timestep=timestep,
+                        optimization = optimization)
+    
+    #%%Define sensitivity analysis settings
     sensitivity_analysis = False
+    max_sens_samples = 20
+    
+    #create sensitivity analysis instance
     if sensitivity_analysis:
-        max_sens_samples = 20
         sens = Sensitivity_analysis(simulation = sim,
                                     optimization = opt_model,
                                     randomize_method = 1)
@@ -81,12 +80,11 @@ def Main():
         max_sens_samples = 1
     
     #%%
-    #%%main optimization method 
+    #%% Main optimization method 
     sens_iterations = 0
     #loop for sensitivity analysis
     while sens_iterations < max_sens_samples:
-        #get model runtime
-        #get start time
+        #get model start time to calculate program run-time
         model_start = datetime.now()
         model_start_time = model_start.strftime("%H:%M:%S")
         
@@ -104,7 +102,7 @@ def Main():
         while iteration_needed:
             iteration_needed = False
         
-            # Economics   
+            # Initialize economic analysis instancees with simulation values for each sensitivity iteration
             if econ_recalc_needed: 
                 #reset flag
                 econ_recalc_needed = False
@@ -132,7 +130,7 @@ def Main():
                                             sim.battery_tot_energy,
                                             timestep,
                                             simulation_steps)
-                #run economics module to obtain LCOEs to pass to pyomo optimization model if needed
+                #run economics module to obtain LCOEs to pass to pyomo optimization model
                 for i in range(len(sim.pv)):
                     eco_pv[i].calculate()
                 
@@ -143,9 +141,7 @@ def Main():
                 eco_bat.calculate()
                 
             #calculate technical preformance
-            tech_Jan.calculate()
-            tech_Jul.calculate()
-            tech_yr10_Jul.calculate()
+            tech.calculate()
             
             #exit iteration loop if no optimization of model selected
             if not optimization:
@@ -156,15 +152,16 @@ def Main():
             
             else:
                 #run optimization
-                
+                #update optimisation model economical data                
                 opt_model.update_model_data(eco_pv = eco_pv, 
                                             eco_bat = eco_bat,
                                             eco_charger = eco_pv_charger,
                                             eco_bms = eco_bms)
+                #initialize optimisation and run it
                 opt_model.init_model()
-                opt_model.optimize_model()
+                opt_model.optimize_model()                
                 
-                #recalculate efficiencies and battery model with optimization data and update simulation lists
+                #rerun simulaiton model with optimization data and obtain new component efficiencies and SODs    
                 sim.update_simulation_data(opt_model.pv_flow, 
                                            opt_model.battery_flow, 
                                            opt_model.power_junct_flow,
@@ -176,26 +173,22 @@ def Main():
                     opt_model.update = False
                 
                 #calculate technical preformance
-                tech_Jan.calculate()
-                tech_Jul.calculate()
-                tech_yr10_Jul.calculate()
-                tech_Jan.avg_daily_power_mix(1,1)       
-                tech_Jul.avg_daily_power_mix(1,5)                         
-                tech_yr10_Jul.avg_daily_power_mix(1,10)
+                tech.calculate()
+                
+                #get average daily power composition for the dispatch analysis
+                dispatch.get_daily_power_mix(1,1)    
             
-                #check whether deviation in costs, efficiency ... between iterations is lower than threshold. If not rerun optimization
-                #do only if peak power was not reduced, so as to optimize only one case at a time
+                #check whether deviation in costs between iterations is lower than threshold. If not rerun optimization
                 if opt_model.check_iteration_deviation():
                     iteration_needed = True
-                    
-                #save optimization as new simulation values to be used in the performance evaluation
                     
                 #go into next iteration if needed
                 if iteration_needed:
                     iteration += 1
                     
                     if iteration >= max_opt_iterations:
-                        print('maximal iteration thrreshold passed. Exiting loop')
+                        print('---------------------------------------------------------')
+                        print('Caution: maximal iteration thrreshold passed. Exiting loop')
                         break
                     print('---------------------------------------------------------')
                     print("iteration", iteration, ": Rerunning model simulation and optimization")
@@ -204,16 +197,19 @@ def Main():
         model_end = datetime.now()
         model_end_time = model_end.strftime("%H:%M:%S")       
         total_elapsed_time = (model_end.hour - model_start.hour) * 60 + model_end.minute - model_start.minute + (model_end.second-model_start.second)/60
+        
+        print('-----------Optimization duration-----------')
         print("Model optimization End Time =", model_end_time)
         print('total elapsed time [min]', total_elapsed_time)
         
-        tech_Jan.get_runtime(total_elapsed_time)
+        tech.get_runtime(total_elapsed_time)
         
+        #%% 
         #%% Simulation results
         #plot results for first and unaltered simulation (and optimization) run
         if sens_iterations == 1:
             
-            #%% Simulation evaluation
+            #%% Simulation evaluation and plots
             #create graphics model
             graph = Graphics(sim, opt_model)        
             # Graphics
@@ -225,16 +221,19 @@ def Main():
                 graph.plot_components_sod()
                 if opt_model:
                     graph.plot_sold_power()
-                    #stackplot for month of January and July
-                    graph.stack_plot(tech_Jan.day_hours, tech_Jan.load_power, tech_Jan.power_mix, tech_Jan.mstd, tech_Jan.load_power, tech_Jan.mean_SOC)
-                    graph.stack_plot(tech_Jul.day_hours, tech_Jul.load_power, tech_Jul.power_mix, tech_Jul.mstd,tech_Jul.load_power, tech_Jul.mean_SOC)
-                    graph.stack_plot(tech_yr10_Jul.day_hours, tech_yr10_Jul.load_power, tech_yr10_Jul.power_mix, tech_yr10_Jul.mstd,tech_yr10_Jul.load_power, tech_yr10_Jul.mean_SOC)
-
+                    #plot dispatch schedule
+                    graph.stack_plot(dispatch.day_hours,
+                                     dispatch.load_power,
+                                     dispatch.power_mix,
+                                     dispatch.mstd,
+                                     dispatch.load_power,
+                                     dispatch.mean_SOC)
+                    
                 ## print technical performance
-                tech_Jan.plot_cut_off_days()
-                tech_Jan.plot_soc_days()
+                tech.plot_cut_off_days()
+                tech.plot_soc_days()
                 # Print main technical objective results
-                tech_Jan.print_technical_objective_functions()
+                tech.print_technical_objective_functions()
                 if optimization:
                     for i in range(len(sim.pv)):
                         print("LCOE_PV",i,":",opt_model.pv_LCOE[i])
@@ -247,30 +246,26 @@ def Main():
                 if optimization:
                     #Sum of each component LCoE
                     #from energy system
-                    LCoE = ((sum(sim.pv_charger_power)-sum(tech_Jan.power_pv_unused))/sum(sim.load_power_demand))*\
-                            opt_model.pv_LCOE[i] # * 1000
-                            # (sum(eco_pv[i].annuity_total_levelized_costs for i in range(len(eco_pv)))\
-                            # + eco_pv_charger.annuity_total_levelized_costs \
-                            # + eco_bms.annuity_total_levelized_costs \
-                            # + eco_bat.annuity_total_levelized_costs) \
-                            # / ((sum(sim.pv_tot_energy)-sum(tech_Jan.power_pv_unused))) *1000#*(timestep/3600)/1000 / (simulation_steps*(timestep/3600)/8760))
-                    
+                    LCoE = ((sum(sim.pv_charger_power)-sum(tech.power_pv_unused))/sum(sim.load_power_demand))*\
+                            opt_model.pv_LCOE[i] 
+                            
                     #from grid
-                    LCoE += (tech_Jan.tot_power_bought)/sum(sim.load_power_demand)*sim.market.avg_buy_cost
+                    LCoE += (tech.tot_power_bought)/sum(sim.load_power_demand)*sim.market.avg_buy_cost
                 else:
                     LCoE = (sum(eco_pv[i].annuity_total_levelized_costs for i in range(len(eco_pv)))\
                             + eco_pv_charger.annuity_total_levelized_costs \
                             + eco_bms.annuity_total_levelized_costs \
                             + eco_bat.annuity_total_levelized_costs) \
-                            / (((sum(sim.pv_tot_energy)-sum(tech_Jan.power_pv_unused))) *1000*(timestep/3600)/1000 / (simulation_steps*(timestep/3600)/8760))
+                            / (((sum(sim.pv_tot_energy)-sum(tech.power_pv_unused))) *1000*(timestep/3600)/1000 / (simulation_steps*(timestep/3600)/8760))
                 
                 print('---------------------------------------------------------')
                 print('Objective functions - Technical')
                 print('---------------------------------------------------------')
                 if optimization:
                    print('total load [MWh] =', sum(sim.load_power_demand)/10**6)
-                   print('total RES Power used [MWh] =', (sum(sim.load_power_demand) - tech_Jan.tot_power_bought)/10**6)
-                   print('total bought [MWh]=', tech_Jan.tot_power_bought/10**6)
+                   print('total RES Power used [MWh] =', (sum(sim.load_power_demand) - tech.tot_power_bought -sum(opt_model.power_shortage_list))/10**6)
+                   print('total shortage power [MWh]=', sum(opt_model.power_shortage_list)/10**6)
+                   print('total bought [MWh]=', tech.tot_power_bought/10**6)
                 print('LCoE [$/kWh] =', round(LCoE,4))
                 print('---------------------------------------------------------')    
      
@@ -312,22 +307,17 @@ def Main():
                                             total_load = sens.total_load)
     if save_data:
         if sensitivity_analysis:
-            save_model_data(sim = sim, opt = opt_model, tech = tech_Jan, sens = sens)
+            save_model_data(sim = sim, opt = opt_model, tech = tech, sens = sens)
         elif optimization: 
-            save_model_data(sim = sim, opt = opt_model, tech = tech_Jan)    
+            save_model_data(sim = sim, opt = opt_model, tech = tech)    
         else:
-            save_model_data(sim = sim, tech = tech_Jan)         
+            save_model_data(sim = sim, tech = tech)         
     
 #run code with try exception handling for debugging
 try:
     main = Main()
     print('exited normally')
-    #play sound on simulation end
-    # winsound.Beep(500, 500)
 except (RuntimeError) as error:
     print('Runtime Error ')
-    # winsound.Beep(1000, 1000)
-    # winsound.Beep(1000, 1000)
-    # winsound.Beep(1000, 2000)
     
            

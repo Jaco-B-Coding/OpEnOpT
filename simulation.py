@@ -52,7 +52,7 @@ class Simulation(Simulatable):
         # [Wp] Installed PV power
         self.pv_peak_power = [500000]
         self.pv_peak_power_start = self.pv_peak_power.copy()
-        self.max_pv_peak_power = [500000]
+        self.max_pv_peak_power = [5000000]
         self.pv_tot_peak = 0 
         for peak_power in self.pv_peak_power:
             self.pv_tot_peak += peak_power
@@ -93,7 +93,7 @@ class Simulation(Simulatable):
         
         #market day_ahead price class 
         #grid connection possible
-        self.grid_connected = True
+        self.grid_connected = False
         self.day_ahead_market = False
         self.market = Market(day_ahead = self.day_ahead_market)
         
