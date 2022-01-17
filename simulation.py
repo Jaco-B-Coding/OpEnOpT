@@ -52,7 +52,7 @@ class Simulation(Simulatable):
         # [Wp] Installed PV power
         self.pv_peak_power = [500000]
         self.pv_peak_power_start = self.pv_peak_power.copy()
-        self.max_pv_peak_power = [500000]
+        self.max_pv_peak_power = [5000000]
         self.pv_tot_peak = 0 
         for peak_power in self.pv_peak_power:
             self.pv_tot_peak += peak_power
@@ -74,6 +74,20 @@ class Simulation(Simulatable):
                                                        tz='Europe/Rome',
                                                        altitude=200)
 
+        #for the optimisation model
+        #Enable/disable grid connection
+        self.grid_connected = False
+        self.day_ahead_market = False
+        if self.grid_connected or self.day_ahead_market:
+            #specify maximal buy and sell amounts
+            self.max_buy = 10000000
+            self.max_sell = 0
+        self.market = Market(day_ahead = self.day_ahead_market)
+        
+        #shortage power
+        self.LCoE_shortrage = 0.01
+        self.max_shortage_power = 50000000
+
         ## Define simulation time parameters     
         # Number of simulation timesteps
         self.simulation_steps = simulation_steps
@@ -91,12 +105,7 @@ class Simulation(Simulatable):
         # load class
         self.load = Load()
         
-        #market day_ahead price class 
-        #grid connection possible
-        self.grid_connected = True
-        self.day_ahead_market = False
-        self.market = Market(day_ahead = self.day_ahead_market)
-        
+
         # Component classes
         self.pv = list()
         for pv_peak_power in self.pv_peak_power:
@@ -165,54 +174,7 @@ class Simulation(Simulatable):
                                               end=2)
         self.market.calculate()
 
-    
-    #%% update simulation with model optimization results
-    # def model_opt_update(self):
-    #     '''
-    #     Method to update simulation parameters with model optimization results, which:
-    #         changes peak power and capacity values
-    #         sets new battery charge/discharge power array
-        
-    #     Parameters
-    #     ----------
-    #     None        
-    #     '''
-    
-    #     # Component classes
-    #     self.pv = Photovoltaic(timestep=self.timestep,
-    #                            peak_power=self.pv_peak_power,
-    #                            controller_type='mppt',
-    #                            env=self.env,
-    #                            file_path='data/components/photovoltaic_resonix_120Wp.json')
-        
-    #     self.wind = None
-        
-    #     self.pv_charger = Power_Component(timestep=self.timestep,
-    #                                    power_nominal=self.pv_peak_power, 
-    #                                    input_link=self.pv, 
-    #                                    file_path='data/components/power_component_mppt.json')  
-        
-    #     self.power_junction = Power_Junction(input_link_1=self.pv_charger, 
-    #                                          input_link_2=None, 
-    #                                          load=self.load)
-        
-    #     self.battery_management = Power_Component(timestep=self.timestep,
-    #                                               power_nominal=self.pv_peak_power, 
-    #                                               input_link=self.power_junction, 
-    #                                               file_path='data/components/power_component_bms.json')   #---> does power nominal also be adjusted for masximum buy/Sell amount?
-
-    #     self.battery = Battery(timestep=self.timestep,
-    #                            capacity_nominal_wh=self.battery_capacity, 
-    #                            input_link=self.battery_management, 
-    #                            env=self.env,
-    #                            file_path='data/components/battery_lfp.json')
-       
-    #     ## Initialize Simulatable class and define needs_update initially to True
-    #     self.needs_update = True
-        
-    #     Simulatable.__init__(self, self.env,self.load,self.pv,self.pv_charger,
-    #                          self.power_junction, self.battery_management, self.battery)
-        
+   
     
     #%% run simulation for every timestep
     def simulate(self):
