@@ -95,7 +95,7 @@ class Battery(Serializable, Simulatable):
         # [s] Timestep
         self.timestep = timestep
 
-        ##Basic parameters
+        ##Basic parameters                                                      
         ##Power model
         # [Wh] Battery nominal capacity at nominal C-Rate
         self.capacity_nominal_wh = capacity_nominal_wh
