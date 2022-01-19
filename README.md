@@ -8,10 +8,26 @@ The oiptimization objective is comprised of a cost minimisation approach, where 
 
 As for the optimization environment, the software package Pyomo was used. It is a Python-based open-source software package that supports a diverse set of optimization capabilities for formulating, solving, and analyzing optimization models.
 
-##Installation
+## Installation
 To install OpEnOpT download the code directly. Additional packages that need to be installed are Pyomo and others relating to the chosen optimization solver.
 
 To install Pyomo, refer to the Pyomo installation guide: https://pyomo.readthedocs.io/en/stable/installation.html
 
 For best results and lower optimization run-times the installation of additional solvers is advised. Since OpEnOpT is based on a NLP, all NLP-solvers that are compatible with Pyomo can be used. For a list of possible solvers the following command can be used in the terminal: 
 > pyomo help -s
+or refer to the Pyomo manual: https://pyomo.readthedocs.io/en/stable/solving_pyomo_models.html?highlight=solvers
+However, program testing was conducted using the following solvers:
+- *Ipopt (Interior Point Optimizer)*: An open source software package for large-scale nonlinear optimization. 
+- *MPEC_NLP*: a meta-solver included within the installation of Pyomo. 
+
+
+#### Ipopt
+Ipopt is to be installed separately according to:
+https://coin-or.github.io/Ipopt/INSTALL.html
+
+It comes with the free MUMPS solver which can be used directly in OpEnOpT to solve models. However, it is advisable to install further more efficient sub-solvers such as MA27, MA57 or MA86 as these provide faster results and are generally more stable.
+The installation of the sub-solvers needs to happen separately and is more straightforward whithin a Linux-environment. These need to be downloaded from HSL (Harwell Subroutines Library):
+https://www.hsl.rl.ac.uk/catalogue/
+Older packages, such as the MA27 sub-solver are freely available. The more powerfull MA57 solver as well as the MA86 require an academic license which is obtainable through an application form.
+
+Further additional packages, such as LAPACk and BLAS may also be necessary. Additional information can be found in the Ipopt installation documentation.
