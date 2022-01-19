@@ -15,6 +15,7 @@ To install Pyomo, refer to the Pyomo installation guide: https://pyomo.readthedo
 
 For best results and lower optimization run-times the installation of additional solvers is advised. Since OpEnOpT is based on a NLP, all NLP-solvers that are compatible with Pyomo can be used. For a list of possible solvers the following command can be used in the terminal: 
 > pyomo help -s
+> 
 or refer to the Pyomo manual: https://pyomo.readthedocs.io/en/stable/solving_pyomo_models.html?highlight=solvers
 However, program testing was conducted using the following solvers:
 - *Ipopt (Interior Point Optimizer)*: An open source software package for large-scale nonlinear optimization. 
