@@ -27,8 +27,8 @@ Ipopt is to be installed separately according to:
 https://coin-or.github.io/Ipopt/INSTALL.html
 
 It comes with the free MUMPS solver which can be used directly in OpEnOpT to solve models. However, it is advisable to install further more efficient sub-solvers such as MA27, MA57 or MA86 as these provide faster results and are generally more stable.
-The installation of the sub-solvers needs to happen separately and is more straightforward whithin a Linux-environment. These need to be downloaded from HSL (Harwell Subroutines Library):
+The installation of the sub-solvers needs to happen separately and is more straightforward within a Linux-environment. These need to be downloaded from HSL (Harwell Subroutines Library):
 https://www.hsl.rl.ac.uk/catalogue/
-Older packages, such as the MA27 sub-solver are freely available. The more powerfull MA57 solver as well as the MA86 require an academic license which is obtainable through an application form.
+Older packages, such as the MA27 sub-solver are freely available. The more powerful MA57 solver as well as the MA86 require an academic license which is obtainable through an application form.
 
 Further additional packages, such as LAPACk and BLAS may also be necessary. Additional information can be found in the Ipopt installation documentation.
