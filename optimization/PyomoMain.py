@@ -346,9 +346,9 @@ class Optimization_model():
         #%%PV
         self.model.num_pv_sources = pyo.Param(initialize = self.num_pv_sources)
         self.model.pv_sources_set = pyo.RangeSet(1,self.model.num_pv_sources)        
-        self.model.pv_charger_eff_coeff_set = pyo.RangeSet(1,len(self.sim.pv_charger.eff_coeff_array))
-        self.model.pv_eff_fit_deg = pyo.Param(initialize = len(self.sim.pv_charger.eff_coeff_array))
-
+        if self.sim.pv_charger.poly_fit:
+            self.model.pv_charger_eff_coeff_set = pyo.RangeSet(1,len(self.sim.pv_charger.eff_coeff_array))
+            self.model.pv_eff_fit_deg = pyo.Param(initialize = len(self.sim.pv_charger.eff_coeff_array))
         
         #block used for construction of pv self.model components
         def pv_comp_rule (model_block, model_set):
@@ -400,9 +400,9 @@ class Optimization_model():
         #%%Batteries
         self.model.num_battery_arrays = pyo.Param(initialize = self.num_battery_arrays)
         self.model.battery_arrays_set = pyo.RangeSet(1,self.model.num_battery_arrays)
-        self.model.battery_charger_eff_coeff_set = pyo.RangeSet(1,len(self.sim.battery_management.eff_coeff_array))
-        self.model.batt_eff_fit_deg = pyo.Param(initialize = len(self.sim.battery_management.eff_coeff_array))
-
+        if self.sim.pv_charger.poly_fit:
+            self.model.battery_charger_eff_coeff_set = pyo.RangeSet(1,len(self.sim.battery_management.eff_coeff_array))
+            self.model.batt_eff_fit_deg = pyo.Param(initialize = len(self.sim.battery_management.eff_coeff_array))
         
         #block used for construction of battery model components
         def battery_comp_rule (model_block, model_set):
