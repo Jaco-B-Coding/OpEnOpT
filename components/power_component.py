@@ -92,8 +92,10 @@ class Power_Component(Serializable, Simulatable):
         #calculated levelized costs
         self.LCOE_power_comp = 0
         
-        #calculate poly fit parameters for output efficiency
-        self.eff_output_polyfit_coeff()
+        #calculate poly fit parameters for output efficiency if needed for 
+        self.poly_fit = False
+        if self.poly_fit:
+            self.eff_output_polyfit_coeff()
 
 
     def calculate(self):
