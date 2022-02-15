@@ -120,12 +120,12 @@ class Power_Component(Serializable, Simulatable):
 
         input_link_power = self.input_link.power
 
-        # Calculate the Power output or input
+        # Calculate the Power output or input (charge)
         if self.input_link.power >= 0:
             self.calculate_efficiency_output(input_link_power)
             self.calculate_power_output(input_link_power)
 
-        if self.input_link.power < 0:
+        if self.input_link.power < 0: #(discharge)
             self.calculate_efficiency_input(input_link_power)
             self.calculate_power_input(input_link_power)
 
